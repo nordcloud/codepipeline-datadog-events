@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "AWS Cloudwatch Events for CodePipeline subscriber"
+Parameters: 
+  TargetQueue:
+    Type: String
+    Description: Target Queue ARN
+Resources: 
+  SNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - 
+          Endpoint: !Ref TargetQueue
+          Protocol: "sqs"
+  # EventsRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service:
+  #               - "events.amazonaws.com"
+  #           Action: sts:AssumeRole
+  #       Policies:
+  #         - PolicyDocument:
+  #             Version: "2012-10-17"
+  #             Statement:
+  #               - Effect: Allow
+  #                 Action:
+  #                   - sns:*
+  #                 Resource: !Ref SNS
+  EventTopicPolicy:
+    Type: "AWS::SNS::TopicPolicy"
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "events.amazonaws.com"
+            Resource: "*"
+            Action: "sns:Publish"
+      Topics: 
+        - !Ref SNS
+  CodePipelineEvents:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - "aws.codepipeline"
+      # RoleArn: !Ref EventsRole
+      Targets:
+      - 
+        Arn: !Ref SNS
+        Id: 0
+  
+  

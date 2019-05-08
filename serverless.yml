@@ -1,0 +1,61 @@
+service:
+  name: codepipeline-datadog-events
+
+# Add the serverless-webpack plugin
+plugins:
+  - serverless-webpack
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  memorySize: 128
+  timeout: 10
+  logRetentionInDays: 7
+  variableSyntax: "\\$\\{(?!AWS)([ \":a-zA-Z0-9._,\\-\\/\\(\\)]+?)}"
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "sqs:SendMessage"
+        - "sqs:GetQueueUrl"
+      Resource:
+        Fn::GetAtt:
+          - EventQueue
+          - Arn
+    - Effect: "Allow"
+      Action:
+        - "sqs:ListQueues"
+      Resource: "*"
+
+functions:
+  main:
+    handler: handler.main
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - EventQueue
+              - Arn
+    environment:
+      DD_API_KEY: ${ssm:/datadog/DD_API_KEY~true}
+
+resources:
+  Resources:
+    EventQueue:
+      Type: AWS::SQS::Queue
+
+    QueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Id: "QueuePolicy1"
+          Statement:
+            - Effect: "Allow"
+              Action: "sqs:SendMessage"
+              Resource: "*"
+              Principal: "*"
+              Condition:
+                ArnLike:
+                  "AWS:SourceArn": !Sub "arn:aws:sns:*:${AWS::AccountId}:*"
+        Queues:
+          - !Ref EventQueue
