@@ -6,6 +6,7 @@ import fetch from "node-fetch";
 
 const DATADOG_API = "https://api.datadoghq.com/api/v1";
 const DD_API_KEY = process.env.DD_API_KEY;
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
 
 interface CloudwatchPipelineEventDetailType {
   owner: string;
@@ -114,6 +115,47 @@ const makeDatadogEvent = (
   tags: [`pipeline:${event.detail.pipeline}`, `region:${event.region}`]
 });
 
+const slackStateToColor = (state: string) => {
+  switch (state) {
+    case "FAILED":
+      return "#a63655";
+    case "SUCCEEDED":
+      return "#36a64f";
+    default:
+      return "#3655a6";
+  }
+};
+
+const eventToSlackMessage = (event: CloudwatchPipelineEvent) => ({
+  pretext: event["detail-type"],
+  title: `${event.detail.pipeline}`,
+  color: slackStateToColor(event.detail.state),
+  fields: [
+    {
+      title: "Region",
+      value: event.region,
+      short: true
+    },
+    {
+      title: "State",
+      value: event.detail.state,
+      short: true
+    }
+  ]
+});
+
+const slackPostChannel = message =>
+  fetch(SLACK_WEBHOOK_URL, {
+    method: "post",
+    headers: {
+      "Content-type": "application/json"
+    },
+    body: JSON.stringify({
+      text: "",
+      attachments: [message]
+    })
+  });
+
 export const main = async (event: SQSEvent, _context: Context) =>
   await Promise.all(
     event.Records.map(v => JSON.parse(v.body) as SNSMessage)
@@ -124,7 +166,12 @@ export const main = async (event: SQSEvent, _context: Context) =>
           JSON.stringify({ message: v, alert_type: getEventSeverity(v) })
         );
         try {
-          return datadogCreateEvent(makeDatadogEvent(v));
+          return Promise.all([
+            datadogCreateEvent(makeDatadogEvent(v)),
+            v["detail-type"] == "CodePipeline Pipeline Execution State Change"
+              ? slackPostChannel(eventToSlackMessage(v))
+              : Promise.resolve(null)
+          ]);
         } catch (err) {
           console.log(err);
         }
