@@ -1,12 +1,14 @@
 //import { ScheduledEvent } from 'aws-lambda';
 import "source-map-support/register";
-import { SQSEvent, Context, SNSMessage } from "aws-lambda";
-
+import { SQSEvent, Context, SNSMessage, ScheduledEvent } from "aws-lambda";
 import fetch from "node-fetch";
+import * as AWS from "aws-sdk";
+import { pipeline } from "stream";
 
 const DATADOG_API = "https://api.datadoghq.com/api/v1";
 const DD_API_KEY = process.env.DD_API_KEY;
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+const ec2svc = new AWS.EC2({ region: "eu-west-1" });
 
 interface CloudwatchPipelineEventDetailType {
   owner: string;
@@ -177,3 +179,71 @@ export const main = async (event: SQSEvent, _context: Context) =>
         }
       })
   );
+
+const pipelineStatusLookup = {
+  // https://docs.aws.amazon.com/codepipeline/latest/APIReference/API_ActionExecution.html
+  Succeeded: 0,
+  InProgress: 1,
+  Failed: 2
+};
+
+const getPipelineStatus = async (region: string, name: string) =>
+  new AWS.CodePipeline({ region })
+    .getPipelineState({ name })
+    .promise()
+    .then(x =>
+      x.stageStates
+        .map(s => s.actionStates.map(a => a.latestExecution.status))
+        .reduce((p, v) => p.concat(v), [])
+        .reduce(
+          (p, v) => (pipelineStatusLookup[v] > pipelineStatusLookup[p] ? v : p),
+          "Succeeded"
+        )
+    );
+
+const listPipelines = async (
+  region: string,
+  acc: string[] = [],
+  nextToken: string = null
+): Promise<string[]> =>
+  new AWS.CodePipeline({ region })
+    .listPipelines({ nextToken })
+    .promise()
+    .then(async res =>
+      res.nextToken != null
+        ? await listPipelines(
+            region,
+            acc.concat(res.pipelines.map(p => p.name)),
+            res.nextToken
+          )
+        : acc.concat(res.pipelines.map(p => p.name))
+    );
+
+export const scheduledMetrics = async (
+  _event: ScheduledEvent,
+  _context: Context
+) =>
+  await ec2svc
+    .describeRegions()
+    .promise()
+    .then(regionsResponse => regionsResponse.Regions.map(r => r.RegionName))
+    .then(async regions =>
+      (await Promise.all(
+        regions.map(async r =>
+          (await listPipelines(r).catch(_ => [] as string[])).map(p => ({
+            region: r,
+            name: p
+          }))
+        )
+      )).reduce((p, v) => p.concat(v), [])
+    )
+    .then(
+      async pipelines =>
+        await Promise.all(
+          pipelines.map(async p => ({
+            ...p,
+            state: await getPipelineStatus(p.region, p.name)
+          }))
+        )
+    )
+    .then(console.log);

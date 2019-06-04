@@ -8,12 +8,13 @@
   },
   "dependencies": {
     "@types/node-fetch": "^2.3.3",
+    "aws-sdk": "^2.466.0",
     "node-fetch": "^2.5.0",
     "source-map-support": "^0.5.10"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.17",
-    "@types/node": "^10.12.18",
+    "@types/node": "^10.14.8",
     "serverless-webpack": "^5.2.0",
     "ts-loader": "^5.3.3",
     "typescript": "^3.2.4",
