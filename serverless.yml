@@ -28,6 +28,13 @@ provider:
       Action:
         - "sqs:ListQueues"
       Resource: !Sub "arn:aws:${AWS::AccountId}:....."
+    - Effect: "Allow"
+      Action: 
+        - "cloudwatch:PutMetricData"
+        - "codepipeline:List*"
+        - "codepipeline:Get*"
+        - "ec2:DescribeRegions"
+      Resource: "*"
 
 functions:
   main:
@@ -38,6 +45,10 @@ functions:
             Fn::GetAtt:
               - EventQueue
               - Arn
+  cloudwatch:
+    handler: handler.scheduledMetrics
+    events:
+      - schedule: rate(1 minute)
 
 resources:
   Resources:

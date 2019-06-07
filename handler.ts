@@ -3,7 +3,6 @@ import "source-map-support/register";
 import { SQSEvent, Context, SNSMessage, ScheduledEvent } from "aws-lambda";
 import fetch from "node-fetch";
 import * as AWS from "aws-sdk";
-import { pipeline } from "stream";
 
 const DATADOG_API = "https://api.datadoghq.com/api/v1";
 const DD_API_KEY = process.env.DD_API_KEY;
@@ -246,4 +245,32 @@ export const scheduledMetrics = async (
           }))
         )
     )
+    .then(pipelines => Promise.all(pipelines.map(p => cloudwatchPutMetric(p))))
     .then(console.log);
+
+const cloudwatchPutMetric = (p: {
+  state: string;
+  region: string;
+  name: string;
+}) =>
+  new AWS.CloudWatch({ region: p.region })
+    .putMetricData({
+      Namespace: "NORDCLOUD",
+      MetricData: [
+        {
+          MetricName: "codepipeline_status",
+          Values: [pipelineStatusLookup[p.state]],
+          Dimensions: [{ Name: "Name", Value: p.name }],
+          StatisticValues: {
+            Maximum: pipelineStatusLookup[p.state],
+            Minimum: pipelineStatusLookup[p.state],
+            SampleCount: 1,
+            Sum: pipelineStatusLookup[p.state]
+          },
+          StorageResolution: 60,
+          Timestamp: new Date(),
+          Unit: "None"
+        }
+      ]
+    })
+    .promise();
