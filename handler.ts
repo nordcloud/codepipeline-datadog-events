@@ -193,6 +193,7 @@ const getPipelineStatus = async (region: string, name: string) =>
     .then(x =>
       x.stageStates
         .map(s => s.actionStates.map(a => a.latestExecution.status))
+        .map(s => s.actionStates.map(a => a.latestExecution ? a.latestExecution.status : "Unknown"))
         .reduce((p, v) => p.concat(v), [])
         .reduce(
           (p, v) => (pipelineStatusLookup[v] > pipelineStatusLookup[p] ? v : p),
