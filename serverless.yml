@@ -8,9 +8,11 @@ plugins:
 provider:
   name: aws
   runtime: nodejs8.10
+  runtime: nodejs12.x
   memorySize: 128
   timeout: 10
   logRetentionInDays: 7
+  versionFunctions: false
   environment:
     DD_API_KEY: ${ssm:/datadog/DD_API_KEY~true}
     SLACK_WEBHOOK_URL: ${ssm:/slack/SLACK_WEBHOOK_URL~true}
@@ -64,6 +66,8 @@ resources:
           Statement:
             - Effect: "Allow"
               Action: "sqs:SendMessage"
+              Action: 
+                - "sqs:SendMessage"
               Resource: "*"
               Principal: "*"
               Condition:
